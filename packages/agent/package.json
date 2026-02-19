@@ -1,0 +1,32 @@
+{
+  "name": "@desktop-mcp/agent",
+  "version": "1.0.0",
+  "description": "Desktop agent for WebRTC-based MCP server",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "desktop-mcp-agent": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@desktop-mcp/shared": "file:../shared",
+    "ws": "^8.14.0",
+    "uuid": "^9.0.0",
+    "commander": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0",
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "nodemon": "^3.0.0"
+  }
+}
