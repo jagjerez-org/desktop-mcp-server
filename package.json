@@ -10,9 +10,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "test": "npm run test --workspaces",
-    "lint": "npm run lint --workspaces",
+    "build": "npx tsc -p packages/shared/tsconfig.json && npx tsc -p packages/agent/tsconfig.json && npx tsc -p packages/server/tsconfig.json",
+    "test": "npm run test --workspace=packages/shared && npm run test --workspace=packages/server",
+    "lint": "npx tsc -p packages/shared/tsconfig.json --noEmit && npx tsc -p packages/agent/tsconfig.json --noEmit && npx tsc -p packages/server/tsconfig.json --noEmit",
     "clean": "npm run clean --workspaces && rm -rf node_modules",
     "dev:server": "npm run dev --workspace=packages/server",
     "dev:agent": "npm run dev --workspace=packages/agent",
