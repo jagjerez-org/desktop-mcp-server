@@ -16,6 +16,7 @@ import {
 import screenshot from "screenshot-desktop";
 import sharp from "sharp";
 import { z } from "zod";
+import { randomUUID } from "crypto";
 
 // ── Configure nut.js ──────────────────────────────────
 keyboard.config.autoDelayMs = 25;
@@ -52,7 +53,7 @@ const KEY_MAP: Record<string, Key> = {
   insert: Key.Insert,
 };
 
-function resolveKey(keyName: string): Key {
+export function resolveKey(keyName: string): Key {
   const lower = keyName.toLowerCase();
   if (KEY_MAP[lower]) return KEY_MAP[lower];
   // Single character
@@ -65,425 +66,447 @@ function resolveKey(keyName: string): Key {
   throw new Error(`Unknown key: ${keyName}`);
 }
 
-// ── MCP Server ────────────────────────────────────────
-const server = new McpServer({
-  name: "desktop-mcp-server",
-  version: "1.0.0",
-});
+// ── Session Management ────────────────────────────────
+interface ActiveSession {
+  sessionId: string;
+  deviceId: string;
+  transport: any;
+  server: McpServer;
+  createdAt: Date;
+  lastActivity: Date;
+}
 
-// ── Tool: screenshot ──────────────────────────────────
-server.tool(
-  "screenshot",
-  "Capture the current screen and return as a base64 image. Optionally crop a region.",
-  {
-    quality: z.number().min(1).max(100).default(60).describe("JPEG quality (1-100)"),
-    maxWidth: z.number().optional().describe("Max width to resize to (preserves aspect ratio)"),
-    x: z.number().optional().describe("Crop region X"),
-    y: z.number().optional().describe("Crop region Y"),
-    width: z.number().optional().describe("Crop region width"),
-    height: z.number().optional().describe("Crop region height"),
-  },
-  async ({ quality, maxWidth, x, y, width, height }) => {
-    try {
-      const imgBuffer = await screenshot({ format: "png" });
-      let pipeline = sharp(imgBuffer);
+const activeSessions = new Map<string, ActiveSession>();
 
-      // Crop if specified
-      if (x !== undefined && y !== undefined && width !== undefined && height !== undefined) {
-        pipeline = pipeline.extract({ left: x, top: y, width, height });
-      }
-
-      // Resize if needed
-      if (maxWidth) {
-        pipeline = pipeline.resize({ width: maxWidth, withoutEnlargement: true });
-      }
-
-      const jpeg = await pipeline.jpeg({ quality }).toBuffer();
-      const base64 = jpeg.toString("base64");
-
-      return {
-        content: [
-          { type: "image", data: base64, mimeType: "image/jpeg" },
-          { type: "text", text: `Screenshot captured (${jpeg.length} bytes)` },
-        ],
-      };
-    } catch (err) {
-      return { content: [{ type: "text", text: `Screenshot failed: ${err}` }] };
-    }
-  }
-);
-
-// ── Tool: mouse_move ──────────────────────────────────
-server.tool(
-  "mouse_move",
-  "Move the mouse cursor to absolute coordinates.",
-  {
-    x: z.number().describe("X coordinate"),
-    y: z.number().describe("Y coordinate"),
-  },
-  async ({ x, y }) => {
-    await mouse.setPosition(new Point(x, y));
-    return { content: [{ type: "text", text: `Mouse moved to (${x}, ${y})` }] };
-  }
-);
-
-// ── Tool: mouse_click ─────────────────────────────────
-server.tool(
-  "mouse_click",
-  "Click mouse button at current position or specified coordinates.",
-  {
-    button: z.enum(["left", "right", "middle"]).default("left"),
-    x: z.number().optional().describe("Move to X before clicking"),
-    y: z.number().optional().describe("Move to Y before clicking"),
-    doubleClick: z.boolean().default(false),
-  },
-  async ({ button, x, y, doubleClick }) => {
-    if (x !== undefined && y !== undefined) {
-      await mouse.setPosition(new Point(x, y));
-    }
-
-    const btn = button === "right" ? Button.RIGHT : button === "middle" ? Button.MIDDLE : Button.LEFT;
-
-    if (doubleClick) {
-      await mouse.doubleClick(btn);
-    } else {
-      await mouse.click(btn);
-    }
-
-    const pos = await mouse.getPosition();
-    return {
-      content: [{ type: "text", text: `${doubleClick ? "Double-" : ""}Clicked ${button} at (${pos.x}, ${pos.y})` }],
-    };
-  }
-);
-
-// ── Tool: mouse_drag ──────────────────────────────────
-server.tool(
-  "mouse_drag",
-  "Drag from one position to another.",
-  {
-    fromX: z.number(),
-    fromY: z.number(),
-    toX: z.number(),
-    toY: z.number(),
-  },
-  async ({ fromX, fromY, toX, toY }) => {
-    await mouse.setPosition(new Point(fromX, fromY));
-    await mouse.pressButton(Button.LEFT);
-    await mouse.setPosition(new Point(toX, toY));
-    await mouse.releaseButton(Button.LEFT);
-    return { content: [{ type: "text", text: `Dragged from (${fromX},${fromY}) to (${toX},${toY})` }] };
-  }
-);
-
-// ── Tool: mouse_scroll ────────────────────────────────
-server.tool(
-  "mouse_scroll",
-  "Scroll the mouse wheel.",
-  {
-    amount: z.number().describe("Scroll amount (positive=down, negative=up)"),
-    x: z.number().optional(),
-    y: z.number().optional(),
-  },
-  async ({ amount, x, y }) => {
-    if (x !== undefined && y !== undefined) {
-      await mouse.setPosition(new Point(x, y));
-    }
-    if (amount > 0) {
-      await mouse.scrollDown(Math.abs(amount));
-    } else {
-      await mouse.scrollUp(Math.abs(amount));
-    }
-    return { content: [{ type: "text", text: `Scrolled ${amount > 0 ? "down" : "up"} ${Math.abs(amount)}` }] };
-  }
-);
-
-// ── Tool: keyboard_type ───────────────────────────────
-server.tool(
-  "keyboard_type",
-  "Type text string using the keyboard.",
-  {
-    text: z.string().describe("Text to type"),
-  },
-  async ({ text }) => {
-    await keyboard.type(text);
-    return { content: [{ type: "text", text: `Typed: "${text}"` }] };
-  }
-);
-
-// ── Tool: keyboard_press ──────────────────────────────
-server.tool(
-  "keyboard_press",
-  "Press one or more keys (supports modifiers). Examples: ['ctrl', 'c'] for Ctrl+C, ['enter'] for Enter.",
-  {
-    keys: z.array(z.string()).describe("Key names to press simultaneously"),
-  },
-  async ({ keys }) => {
-    const resolved = keys.map(resolveKey);
-    if (resolved.length === 1) {
-      await keyboard.pressKey(resolved[0]!);
-      await keyboard.releaseKey(resolved[0]!);
-    } else {
-      // Press all, then release in reverse
-      for (const k of resolved) await keyboard.pressKey(k);
-      for (const k of resolved.reverse()) await keyboard.releaseKey(k);
-    }
-    return { content: [{ type: "text", text: `Pressed: ${keys.join("+")}` }] };
-  }
-);
-
-// ── Tool: get_cursor_position ─────────────────────────
-server.tool(
-  "get_cursor_position",
-  "Get the current mouse cursor position.",
-  {},
-  async () => {
-    const pos = await mouse.getPosition();
-    return { content: [{ type: "text", text: `Cursor at (${pos.x}, ${pos.y})` }] };
-  }
-);
-
-// ── Tool: get_screen_size ─────────────────────────────
-server.tool(
-  "get_screen_size",
-  "Get the screen dimensions.",
-  {},
-  async () => {
-    const w = await screen.width();
-    const h = await screen.height();
-    return { content: [{ type: "text", text: `Screen size: ${w}x${h}` }] };
-  }
-);
-
-// ── Tool: clipboard_read ──────────────────────────────
-server.tool(
-  "clipboard_read",
-  "Read the current clipboard text content.",
-  {},
-  async () => {
-    // Use xclip/pbpaste/powershell depending on platform
-    const { execSync } = await import("child_process");
-    let text = "";
-    try {
-      if (process.platform === "darwin") {
-        text = execSync("pbpaste", { encoding: "utf-8" });
-      } else if (process.platform === "win32") {
-        text = execSync("powershell -command Get-Clipboard", { encoding: "utf-8" });
-      } else {
-        text = execSync("xclip -selection clipboard -o", { encoding: "utf-8" });
-      }
-    } catch {
-      return { content: [{ type: "text", text: "Clipboard empty or not accessible" }] };
-    }
-    return { content: [{ type: "text", text: `Clipboard: ${text}` }] };
-  }
-);
-
-// ── Tool: clipboard_write ─────────────────────────────
-server.tool(
-  "clipboard_write",
-  "Write text to the clipboard.",
-  {
-    text: z.string(),
-  },
-  async ({ text }) => {
-    const { execSync } = await import("child_process");
-    try {
-      if (process.platform === "darwin") {
-        execSync(`echo ${JSON.stringify(text)} | pbcopy`);
-      } else if (process.platform === "win32") {
-        execSync(`echo ${JSON.stringify(text)} | clip`);
-      } else {
-        execSync(`echo ${JSON.stringify(text)} | xclip -selection clipboard`);
-      }
-    } catch {
-      return { content: [{ type: "text", text: "Failed to write to clipboard" }] };
-    }
-    return { content: [{ type: "text", text: `Wrote to clipboard: "${text.slice(0, 50)}..."` }] };
-  }
-);
-
-// ── Tool: run_command ─────────────────────────────────
-server.tool(
-  "run_command",
-  "Execute a shell command and return output. Use with caution.",
-  {
-    command: z.string().describe("Shell command to execute"),
-    timeout: z.number().default(10000).describe("Timeout in ms"),
-  },
-  async ({ command, timeout }) => {
-    const { execSync } = await import("child_process");
-    try {
-      const output = execSync(command, {
-        encoding: "utf-8",
-        timeout,
-        maxBuffer: 1024 * 1024,
-      });
-      return { content: [{ type: "text", text: output || "(no output)" }] };
-    } catch (err: any) {
-      return { content: [{ type: "text", text: `Error: ${err.stderr || err.message}` }] };
-    }
-  }
-);
-
-// ── Tool: screen_stream ───────────────────────────────
-// Returns multiple sequential screenshots for "streaming" vision
-server.tool(
-  "screen_stream",
-  "Capture a burst of sequential screenshots for near-real-time vision. Returns multiple frames.",
-  {
-    frames: z.number().min(1).max(10).default(3).describe("Number of frames to capture"),
-    intervalMs: z.number().min(100).max(5000).default(500).describe("Interval between frames in ms"),
-    quality: z.number().min(1).max(100).default(40).describe("JPEG quality"),
-    maxWidth: z.number().default(800).describe("Max width per frame"),
-  },
-  async ({ frames, intervalMs, quality, maxWidth }) => {
-    const content: Array<{ type: "image"; data: string; mimeType: string } | { type: "text"; text: string }> = [];
-    for (let i = 0; i < frames; i++) {
-      if (i > 0) await new Promise((r) => setTimeout(r, intervalMs));
+// ── Tool Registration Function ────────────────────────
+function registerAllTools(server: McpServer) {
+  // ── Tool: screenshot ──────────────────────────────────
+  server.tool(
+    "screenshot",
+    "Capture the current screen and return as a base64 image. Optionally crop a region.",
+    {
+      quality: z.number().min(1).max(100).default(60).describe("JPEG quality (1-100)"),
+      maxWidth: z.number().optional().describe("Max width to resize to (preserves aspect ratio)"),
+      x: z.number().optional().describe("Crop region X"),
+      y: z.number().optional().describe("Crop region Y"),
+      width: z.number().optional().describe("Crop region width"),
+      height: z.number().optional().describe("Crop region height"),
+    },
+    async ({ quality, maxWidth, x, y, width, height }) => {
       try {
         const imgBuffer = await screenshot({ format: "png" });
-        const jpeg = await sharp(imgBuffer)
-          .resize({ width: maxWidth, withoutEnlargement: true })
-          .jpeg({ quality })
-          .toBuffer();
-        content.push({ type: "image", data: jpeg.toString("base64"), mimeType: "image/jpeg" });
+        let pipeline = sharp(imgBuffer);
+
+        // Crop if specified
+        if (x !== undefined && y !== undefined && width !== undefined && height !== undefined) {
+          pipeline = pipeline.extract({ left: x, top: y, width, height });
+        }
+
+        // Resize if needed
+        if (maxWidth) {
+          pipeline = pipeline.resize({ width: maxWidth, withoutEnlargement: true });
+        }
+
+        const jpeg = await pipeline.jpeg({ quality }).toBuffer();
+        const base64 = jpeg.toString("base64");
+
+        return {
+          content: [
+            { type: "image", data: base64, mimeType: "image/jpeg" },
+            { type: "text", text: `Screenshot captured (${jpeg.length} bytes)` },
+          ],
+        };
       } catch (err) {
-        content.push({ type: "text", text: `Frame ${i} failed: ${err}` });
+        return { content: [{ type: "text", text: `Screenshot failed: ${err}` }] };
       }
     }
-    content.push({ type: "text", text: `Captured ${frames} frames at ${intervalMs}ms intervals` });
-    return { content };
-  }
-);
+  );
 
-// ── Tool: audio_play ──────────────────────────────────
-server.tool(
-  "audio_play",
-  "Play audio through the computer speakers. Accepts a file path or text-to-speech.",
-  {
-    filePath: z.string().optional().describe("Path to audio file to play"),
-    text: z.string().optional().describe("Text to speak via TTS (uses system TTS)"),
-    volume: z.number().min(0).max(100).optional().describe("Volume percentage"),
-  },
-  async ({ filePath, text, volume }) => {
-    const { execSync } = await import("child_process");
-    try {
-      if (volume !== undefined) {
-        if (process.platform === "linux") {
-          execSync(`pactl set-sink-volume @DEFAULT_SINK@ ${volume}%`);
-        } else if (process.platform === "darwin") {
-          execSync(`osascript -e "set volume output volume ${volume}"`);
-        }
-      }
-
-      if (filePath) {
-        if (process.platform === "linux") {
-          execSync(`paplay "${filePath}" || aplay "${filePath}"`, { timeout: 30000 });
-        } else if (process.platform === "darwin") {
-          execSync(`afplay "${filePath}"`, { timeout: 30000 });
-        } else {
-          execSync(`powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`, { timeout: 30000 });
-        }
-        return { content: [{ type: "text", text: `Played: ${filePath}` }] };
-      }
-
-      if (text) {
-        if (process.platform === "linux") {
-          execSync(`espeak-ng "${text.replace(/"/g, '\\"')}"`, { timeout: 15000 });
-        } else if (process.platform === "darwin") {
-          execSync(`say "${text.replace(/"/g, '\\"')}"`, { timeout: 15000 });
-        } else {
-          execSync(`powershell -c "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('${text}')"`, { timeout: 15000 });
-        }
-        return { content: [{ type: "text", text: `Spoke: "${text}"` }] };
-      }
-
-      return { content: [{ type: "text", text: "Provide filePath or text" }] };
-    } catch (err) {
-      return { content: [{ type: "text", text: `Audio error: ${err}` }] };
+  // ── Tool: mouse_move ──────────────────────────────────
+  server.tool(
+    "mouse_move",
+    "Move the mouse cursor to absolute coordinates.",
+    {
+      x: z.number().describe("X coordinate"),
+      y: z.number().describe("Y coordinate"),
+    },
+    async ({ x, y }) => {
+      await mouse.setPosition(new Point(x, y));
+      return { content: [{ type: "text", text: `Mouse moved to (${x}, ${y})` }] };
     }
-  }
-);
+  );
 
-// ── Tool: audio_record ────────────────────────────────
-server.tool(
-  "audio_record",
-  "Record audio from the computer microphone.",
-  {
-    durationSec: z.number().min(1).max(60).default(5).describe("Recording duration in seconds"),
-    outputPath: z.string().default("/tmp/mcp-recording.wav").describe("Output file path"),
-  },
-  async ({ durationSec, outputPath }) => {
-    const { execSync } = await import("child_process");
-    try {
-      if (process.platform === "linux") {
-        execSync(`arecord -d ${durationSec} -f S16_LE -r 16000 -c 1 "${outputPath}"`, { timeout: (durationSec + 5) * 1000 });
-      } else if (process.platform === "darwin") {
-        execSync(`rec -r 16000 -c 1 "${outputPath}" trim 0 ${durationSec}`, { timeout: (durationSec + 5) * 1000 });
+  // ── Tool: mouse_click ─────────────────────────────────
+  server.tool(
+    "mouse_click",
+    "Click mouse button at current position or specified coordinates.",
+    {
+      button: z.enum(["left", "right", "middle"]).default("left"),
+      x: z.number().optional().describe("Move to X before clicking"),
+      y: z.number().optional().describe("Move to Y before clicking"),
+      doubleClick: z.boolean().default(false),
+    },
+    async ({ button, x, y, doubleClick }) => {
+      if (x !== undefined && y !== undefined) {
+        await mouse.setPosition(new Point(x, y));
+      }
+
+      const btn = button === "right" ? Button.RIGHT : button === "middle" ? Button.MIDDLE : Button.LEFT;
+
+      if (doubleClick) {
+        await mouse.doubleClick(btn);
       } else {
-        // Windows: use ffmpeg
-        execSync(`ffmpeg -y -f dshow -i audio="Microphone" -t ${durationSec} -ar 16000 -ac 1 "${outputPath}"`, { timeout: (durationSec + 5) * 1000 });
+        await mouse.click(btn);
       }
-      const { statSync } = await import("fs");
-      const size = statSync(outputPath).size;
-      return { content: [{ type: "text", text: `Recorded ${durationSec}s → ${outputPath} (${size} bytes)` }] };
-    } catch (err) {
-      return { content: [{ type: "text", text: `Record error: ${err}` }] };
-    }
-  }
-);
 
-// ── Tool: volume_control ──────────────────────────────
-server.tool(
-  "volume_control",
-  "Get or set system volume, or mute/unmute.",
-  {
-    action: z.enum(["get", "set", "mute", "unmute"]).default("get"),
-    level: z.number().min(0).max(100).optional().describe("Volume level (for set)"),
-  },
-  async ({ action, level }) => {
-    const { execSync } = await import("child_process");
-    try {
-      if (process.platform === "linux") {
-        switch (action) {
-          case "get": {
-            const vol = execSync("pactl get-sink-volume @DEFAULT_SINK@ | grep -oP '\\d+%' | head -1", { encoding: "utf-8" }).trim();
-            return { content: [{ type: "text", text: `Volume: ${vol}` }] };
-          }
-          case "set":
-            execSync(`pactl set-sink-volume @DEFAULT_SINK@ ${level}%`);
-            return { content: [{ type: "text", text: `Volume set to ${level}%` }] };
-          case "mute":
-            execSync("pactl set-sink-mute @DEFAULT_SINK@ 1");
-            return { content: [{ type: "text", text: "Muted" }] };
-          case "unmute":
-            execSync("pactl set-sink-mute @DEFAULT_SINK@ 0");
-            return { content: [{ type: "text", text: "Unmuted" }] };
+      const pos = await mouse.getPosition();
+      return {
+        content: [{ type: "text", text: `${doubleClick ? "Double-" : ""}Clicked ${button} at (${pos.x}, ${pos.y})` }],
+      };
+    }
+  );
+
+  // ── Tool: mouse_drag ──────────────────────────────────
+  server.tool(
+    "mouse_drag",
+    "Drag from one position to another.",
+    {
+      fromX: z.number(),
+      fromY: z.number(),
+      toX: z.number(),
+      toY: z.number(),
+    },
+    async ({ fromX, fromY, toX, toY }) => {
+      await mouse.setPosition(new Point(fromX, fromY));
+      await mouse.pressButton(Button.LEFT);
+      await mouse.setPosition(new Point(toX, toY));
+      await mouse.releaseButton(Button.LEFT);
+      return { content: [{ type: "text", text: `Dragged from (${fromX},${fromY}) to (${toX},${toY})` }] };
+    }
+  );
+
+  // ── Tool: mouse_scroll ────────────────────────────────
+  server.tool(
+    "mouse_scroll",
+    "Scroll the mouse wheel.",
+    {
+      amount: z.number().describe("Scroll amount (positive=down, negative=up)"),
+      x: z.number().optional(),
+      y: z.number().optional(),
+    },
+    async ({ amount, x, y }) => {
+      if (x !== undefined && y !== undefined) {
+        await mouse.setPosition(new Point(x, y));
+      }
+      if (amount > 0) {
+        await mouse.scrollDown(Math.abs(amount));
+      } else {
+        await mouse.scrollUp(Math.abs(amount));
+      }
+      return { content: [{ type: "text", text: `Scrolled ${amount > 0 ? "down" : "up"} ${Math.abs(amount)}` }] };
+    }
+  );
+
+  // ── Tool: keyboard_type ───────────────────────────────
+  server.tool(
+    "keyboard_type",
+    "Type text string using the keyboard.",
+    {
+      text: z.string().describe("Text to type"),
+    },
+    async ({ text }) => {
+      await keyboard.type(text);
+      return { content: [{ type: "text", text: `Typed: "${text}"` }] };
+    }
+  );
+
+  // ── Tool: keyboard_press ──────────────────────────────
+  server.tool(
+    "keyboard_press",
+    "Press one or more keys (supports modifiers). Examples: ['ctrl', 'c'] for Ctrl+C, ['enter'] for Enter.",
+    {
+      keys: z.array(z.string()).describe("Key names to press simultaneously"),
+    },
+    async ({ keys }) => {
+      const resolved = keys.map(resolveKey);
+      if (resolved.length === 1) {
+        await keyboard.pressKey(resolved[0]!);
+        await keyboard.releaseKey(resolved[0]!);
+      } else {
+        // Press all, then release in reverse
+        for (const k of resolved) await keyboard.pressKey(k);
+        for (const k of resolved.reverse()) await keyboard.releaseKey(k);
+      }
+      return { content: [{ type: "text", text: `Pressed: ${keys.join("+")}` }] };
+    }
+  );
+
+  // ── Tool: get_cursor_position ─────────────────────────
+  server.tool(
+    "get_cursor_position",
+    "Get the current mouse cursor position.",
+    {},
+    async () => {
+      const pos = await mouse.getPosition();
+      return { content: [{ type: "text", text: `Cursor at (${pos.x}, ${pos.y})` }] };
+    }
+  );
+
+  // ── Tool: get_screen_size ─────────────────────────────
+  server.tool(
+    "get_screen_size",
+    "Get the screen dimensions.",
+    {},
+    async () => {
+      const w = await screen.width();
+      const h = await screen.height();
+      return { content: [{ type: "text", text: `Screen size: ${w}x${h}` }] };
+    }
+  );
+
+  // ── Tool: clipboard_read ──────────────────────────────
+  server.tool(
+    "clipboard_read",
+    "Read the current clipboard text content.",
+    {},
+    async () => {
+      // Use xclip/pbpaste/powershell depending on platform
+      const { execSync } = await import("child_process");
+      let text = "";
+      try {
+        if (process.platform === "darwin") {
+          text = execSync("pbpaste", { encoding: "utf-8" });
+        } else if (process.platform === "win32") {
+          text = execSync("powershell -command Get-Clipboard", { encoding: "utf-8" });
+        } else {
+          text = execSync("xclip -selection clipboard -o", { encoding: "utf-8" });
         }
-      } else if (process.platform === "darwin") {
-        switch (action) {
-          case "get": {
-            const vol = execSync('osascript -e "output volume of (get volume settings)"', { encoding: "utf-8" }).trim();
-            return { content: [{ type: "text", text: `Volume: ${vol}%` }] };
-          }
-          case "set":
-            execSync(`osascript -e "set volume output volume ${level}"`);
-            return { content: [{ type: "text", text: `Volume set to ${level}%` }] };
-          case "mute":
-            execSync('osascript -e "set volume with output muted"');
-            return { content: [{ type: "text", text: "Muted" }] };
-          case "unmute":
-            execSync('osascript -e "set volume without output muted"');
-            return { content: [{ type: "text", text: "Unmuted" }] };
+      } catch {
+        return { content: [{ type: "text", text: "Clipboard empty or not accessible" }] };
+      }
+      return { content: [{ type: "text", text: `Clipboard: ${text}` }] };
+    }
+  );
+
+  // ── Tool: clipboard_write ─────────────────────────────
+  server.tool(
+    "clipboard_write",
+    "Write text to the clipboard.",
+    {
+      text: z.string(),
+    },
+    async ({ text }) => {
+      const { execSync } = await import("child_process");
+      try {
+        if (process.platform === "darwin") {
+          execSync(`echo ${JSON.stringify(text)} | pbcopy`);
+        } else if (process.platform === "win32") {
+          execSync(`echo ${JSON.stringify(text)} | clip`);
+        } else {
+          execSync(`echo ${JSON.stringify(text)} | xclip -selection clipboard`);
+        }
+      } catch {
+        return { content: [{ type: "text", text: "Failed to write to clipboard" }] };
+      }
+      return { content: [{ type: "text", text: `Wrote to clipboard: "${text.slice(0, 50)}..."` }] };
+    }
+  );
+
+  // ── Tool: run_command ─────────────────────────────────
+  server.tool(
+    "run_command",
+    "Execute a shell command and return output. Use with caution.",
+    {
+      command: z.string().describe("Shell command to execute"),
+      timeout: z.number().default(10000).describe("Timeout in ms"),
+    },
+    async ({ command, timeout }) => {
+      const { execSync } = await import("child_process");
+      try {
+        const output = execSync(command, {
+          encoding: "utf-8",
+          timeout,
+          maxBuffer: 1024 * 1024,
+        });
+        return { content: [{ type: "text", text: output || "(no output)" }] };
+      } catch (err: any) {
+        return { content: [{ type: "text", text: `Error: ${err.stderr || err.message}` }] };
+      }
+    }
+  );
+
+  // ── Tool: screen_stream ───────────────────────────────
+  // Returns multiple sequential screenshots for "streaming" vision
+  server.tool(
+    "screen_stream",
+    "Capture a burst of sequential screenshots for near-real-time vision. Returns multiple frames.",
+    {
+      frames: z.number().min(1).max(10).default(3).describe("Number of frames to capture"),
+      intervalMs: z.number().min(100).max(5000).default(500).describe("Interval between frames in ms"),
+      quality: z.number().min(1).max(100).default(40).describe("JPEG quality"),
+      maxWidth: z.number().default(800).describe("Max width per frame"),
+    },
+    async ({ frames, intervalMs, quality, maxWidth }) => {
+      const content: Array<{ type: "image"; data: string; mimeType: string } | { type: "text"; text: string }> = [];
+      for (let i = 0; i < frames; i++) {
+        if (i > 0) await new Promise((r) => setTimeout(r, intervalMs));
+        try {
+          const imgBuffer = await screenshot({ format: "png" });
+          const jpeg = await sharp(imgBuffer)
+            .resize({ width: maxWidth, withoutEnlargement: true })
+            .jpeg({ quality })
+            .toBuffer();
+          content.push({ type: "image", data: jpeg.toString("base64"), mimeType: "image/jpeg" });
+        } catch (err) {
+          content.push({ type: "text", text: `Frame ${i} failed: ${err}` });
         }
       }
-      return { content: [{ type: "text", text: `Volume control not implemented for ${process.platform}` }] };
-    } catch (err) {
-      return { content: [{ type: "text", text: `Volume error: ${err}` }] };
+      content.push({ type: "text", text: `Captured ${frames} frames at ${intervalMs}ms intervals` });
+      return { content };
     }
-  }
-);
+  );
+
+  // ── Tool: audio_play ──────────────────────────────────
+  server.tool(
+    "audio_play",
+    "Play audio through the computer speakers. Accepts a file path or text-to-speech.",
+    {
+      filePath: z.string().optional().describe("Path to audio file to play"),
+      text: z.string().optional().describe("Text to speak via TTS (uses system TTS)"),
+      volume: z.number().min(0).max(100).optional().describe("Volume percentage"),
+    },
+    async ({ filePath, text, volume }) => {
+      const { execSync } = await import("child_process");
+      try {
+        if (volume !== undefined) {
+          if (process.platform === "linux") {
+            execSync(`pactl set-sink-volume @DEFAULT_SINK@ ${volume}%`);
+          } else if (process.platform === "darwin") {
+            execSync(`osascript -e "set volume output volume ${volume}"`);
+          }
+        }
+
+        if (filePath) {
+          if (process.platform === "linux") {
+            execSync(`paplay "${filePath}" || aplay "${filePath}"`, { timeout: 30000 });
+          } else if (process.platform === "darwin") {
+            execSync(`afplay "${filePath}"`, { timeout: 30000 });
+          } else {
+            execSync(`powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`, { timeout: 30000 });
+          }
+          return { content: [{ type: "text", text: `Played: ${filePath}` }] };
+        }
+
+        if (text) {
+          if (process.platform === "linux") {
+            execSync(`espeak-ng "${text.replace(/"/g, '\\"')}"`, { timeout: 15000 });
+          } else if (process.platform === "darwin") {
+            execSync(`say "${text.replace(/"/g, '\\"')}"`, { timeout: 15000 });
+          } else {
+            execSync(`powershell -c "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('${text}')"`, { timeout: 15000 });
+          }
+          return { content: [{ type: "text", text: `Spoke: "${text}"` }] };
+        }
+
+        return { content: [{ type: "text", text: "Provide filePath or text" }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Audio error: ${err}` }] };
+      }
+    }
+  );
+
+  // ── Tool: audio_record ────────────────────────────────
+  server.tool(
+    "audio_record",
+    "Record audio from the computer microphone.",
+    {
+      durationSec: z.number().min(1).max(60).default(5).describe("Recording duration in seconds"),
+      outputPath: z.string().default("/tmp/mcp-recording.wav").describe("Output file path"),
+    },
+    async ({ durationSec, outputPath }) => {
+      const { execSync } = await import("child_process");
+      try {
+        if (process.platform === "linux") {
+          execSync(`arecord -d ${durationSec} -f S16_LE -r 16000 -c 1 "${outputPath}"`, { timeout: (durationSec + 5) * 1000 });
+        } else if (process.platform === "darwin") {
+          execSync(`rec -r 16000 -c 1 "${outputPath}" trim 0 ${durationSec}`, { timeout: (durationSec + 5) * 1000 });
+        } else {
+          // Windows: use ffmpeg
+          execSync(`ffmpeg -y -f dshow -i audio="Microphone" -t ${durationSec} -ar 16000 -ac 1 "${outputPath}"`, { timeout: (durationSec + 5) * 1000 });
+        }
+        const { statSync } = await import("fs");
+        const size = statSync(outputPath).size;
+        return { content: [{ type: "text", text: `Recorded ${durationSec}s → ${outputPath} (${size} bytes)` }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Record error: ${err}` }] };
+      }
+    }
+  );
+
+  // ── Tool: volume_control ──────────────────────────────
+  server.tool(
+    "volume_control",
+    "Get or set system volume, or mute/unmute.",
+    {
+      action: z.enum(["get", "set", "mute", "unmute"]).default("get"),
+      level: z.number().min(0).max(100).optional().describe("Volume level (for set)"),
+    },
+    async ({ action, level }) => {
+      const { execSync } = await import("child_process");
+      try {
+        if (process.platform === "linux") {
+          switch (action) {
+            case "get": {
+              const vol = execSync("pactl get-sink-volume @DEFAULT_SINK@ | grep -oP '\\d+%' | head -1", { encoding: "utf-8" }).trim();
+              return { content: [{ type: "text", text: `Volume: ${vol}` }] };
+            }
+            case "set":
+              execSync(`pactl set-sink-volume @DEFAULT_SINK@ ${level}%`);
+              return { content: [{ type: "text", text: `Volume set to ${level}%` }] };
+            case "mute":
+              execSync("pactl set-sink-mute @DEFAULT_SINK@ 1");
+              return { content: [{ type: "text", text: "Muted" }] };
+            case "unmute":
+              execSync("pactl set-sink-mute @DEFAULT_SINK@ 0");
+              return { content: [{ type: "text", text: "Unmuted" }] };
+          }
+        } else if (process.platform === "darwin") {
+          switch (action) {
+            case "get": {
+              const vol = execSync('osascript -e "output volume of (get volume settings)"', { encoding: "utf-8" }).trim();
+              return { content: [{ type: "text", text: `Volume: ${vol}%` }] };
+            }
+            case "set":
+              execSync(`osascript -e "set volume output volume ${level}"`);
+              return { content: [{ type: "text", text: `Volume set to ${level}%` }] };
+            case "mute":
+              execSync('osascript -e "set volume with output muted"');
+              return { content: [{ type: "text", text: "Muted" }] };
+            case "unmute":
+              execSync('osascript -e "set volume without output muted"');
+              return { content: [{ type: "text", text: "Unmuted" }] };
+          }
+        }
+        return { content: [{ type: "text", text: `Volume control not implemented for ${process.platform}` }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Volume error: ${err}` }] };
+      }
+    }
+  );
+}
+
+function createMcpServer(): McpServer {
+  const newServer = new McpServer({
+    name: "desktop-mcp-server",
+    version: "1.0.0",
+  });
+
+  registerAllTools(newServer);
+  return newServer;
+}
+
+// ── Create default server for stdio mode ─────────────
+const server = createMcpServer();
 
 // ── Start ─────────────────────────────────────────────
 async function main() {
@@ -521,12 +544,6 @@ async function main() {
   } = await import("./auth.js");
 
   initAuth();
-
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
-  });
-
-  await server.connect(transport);
 
   // Auto-start first pairing if no devices paired yet
   const existingDevices = listDevices();
@@ -567,6 +584,7 @@ async function main() {
         tools: 16,
         pairedDevices: listDevices().length,
         pairingActive: isPairingActive(),
+        activeSessions: activeSessions.size,
       });
       return;
     }
@@ -605,13 +623,55 @@ async function main() {
 
     // ── Authenticated: MCP ──────────────────────────
     if (url === "/mcp") {
-      await transport.handleRequest(req, res);
+      // Get or create session for this device
+      const deviceId = device?.id || "legacy";
+      const sessionId = req.headers["mcp-session-id"] as string || randomUUID();
+      const sessionKey = `${deviceId}:${sessionId}`;
+      
+      let session = activeSessions.get(sessionKey);
+      
+      if (!session) {
+        // Create new session-specific transport
+        const sessionTransport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => sessionId,
+        });
+        
+        // Create new server instance for this session
+        const sessionServer = createMcpServer();
+        await sessionServer.connect(sessionTransport);
+        
+        session = {
+          sessionId,
+          deviceId,
+          transport: sessionTransport,
+          server: sessionServer,
+          createdAt: new Date(),
+          lastActivity: new Date(),
+        };
+        
+        activeSessions.set(sessionKey, session);
+        console.error(`🔗 New MCP session created: ${sessionKey}`);
+      }
+      
+      // Update last activity
+      session.lastActivity = new Date();
+      
+      // Handle request with session-specific transport
+      await session.transport.handleRequest(req, res);
       return;
     }
 
     // ── Authenticated: device management ────────────
     if (url === "/devices" && req.method === "GET") {
-      json(res, 200, { devices: listDevices() });
+      json(res, 200, { 
+        devices: listDevices(),
+        activeSessions: Array.from(activeSessions.values()).map(s => ({
+          sessionId: s.sessionId,
+          deviceId: s.deviceId,
+          createdAt: s.createdAt,
+          lastActivity: s.lastActivity,
+        }))
+      });
       return;
     }
 
@@ -627,9 +687,19 @@ async function main() {
       const id = url.split("/")[2];
       if (id === "all") {
         const count = revokeAll();
+        // Clear all sessions for revoked devices
+        activeSessions.clear();
         json(res, 200, { revoked: count });
       } else {
         const ok = revokeDevice(id!);
+        if (ok) {
+          // Clear sessions for this device
+          for (const [key, session] of activeSessions.entries()) {
+            if (session.deviceId === id) {
+              activeSessions.delete(key);
+            }
+          }
+        }
         json(res, ok ? 200 : 404, ok ? { revoked: id } : { error: "Device not found" });
       }
       return;
