@@ -19,14 +19,15 @@
   "dependencies": {
     "@desktop-mcp/shared": "file:../shared",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "ws": "^8.14.0",
-    "uuid": "^9.0.0"
+    "sharp": "^0.34.5",
+    "uuid": "^9.0.0",
+    "ws": "^8.14.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.5.0",
     "@types/uuid": "^9.0.0",
+    "@types/ws": "^8.5.0",
+    "nodemon": "^3.0.0",
     "typescript": "^5.3.0",
-    "vitest": "^1.0.0",
-    "nodemon": "^3.0.0"
+    "vitest": "^1.0.0"
   }
 }

@@ -116,7 +116,7 @@ export class InputHandler {
     const clampedY = Math.max(0, Math.min(this.screenHeight - 1, y));
     
     const point = new Point(clampedX, clampedY);
-    await mouse.move(point);
+    await mouse.move([point]);
     console.log(`🖱️ Mouse moved to (${clampedX}, ${clampedY})`);
   }
 
@@ -153,9 +153,9 @@ export class InputHandler {
     const startPoint = new Point(fromX, fromY);
     const endPoint = new Point(toX, toY);
     
-    await mouse.move(startPoint);
+    await mouse.move([startPoint]);
     await mouse.pressButton(Button.LEFT);
-    await mouse.move(endPoint);
+    await mouse.move([endPoint]);
     await mouse.releaseButton(Button.LEFT);
     
     console.log(`🖱️ Dragged from (${fromX}, ${fromY}) to (${toX}, ${toY})`);
@@ -268,34 +268,28 @@ export class InputHandler {
       const { stdout, stderr } = await execAsync(message.command, options);
       
       const result: ShellResult = {
-        id: message.id || 'unknown',
         output: stdout || '',
-        errorOutput: stderr || '',
-        exitCode: 0,
-        duration: Date.now() - startTime,
-        timedOut: false
+        exitCode: 0
       };
 
       return {
         type: 'shell_output',
-        result,
+        output: result.output,
+        exitCode: result.exitCode,
         id: message.id,
         timestamp: Date.now()
       };
 
     } catch (error: any) {
       const result: ShellResult = {
-        id: message.id || 'unknown',
-        output: error.stdout || '',
-        errorOutput: error.stderr || error.message || 'Unknown error',
-        exitCode: error.code || 1,
-        duration: Date.now() - startTime,
-        timedOut: error.signal === 'SIGTERM' || error.signal === 'SIGKILL'
+        output: error.stderr || error.message || 'Unknown error',
+        exitCode: error.code || 1
       };
 
       return {
         type: 'shell_output',
-        result,
+        output: result.output,
+        exitCode: result.exitCode,
         id: message.id,
         timestamp: Date.now()
       };
@@ -339,13 +333,11 @@ export class InputHandler {
         cursorY: mousePos.y,
         scaleFactor: 1.0,
         displays: [{
-          id: 'primary',
+          id: 0,
           name: 'Primary Display',
           width: this.screenWidth,
           height: this.screenHeight,
-          x: 0,
-          y: 0,
-          isPrimary: true
+          primary: true
         }]
       };
     } catch (error) {
@@ -430,10 +422,10 @@ export class InputHandler {
 
     // Handle single character keys
     if (key.length === 1) {
-      return key.toUpperCase() as Key;
+      return key.toUpperCase() as unknown as Key;
     }
 
     // Fallback - try to use the key as-is
-    return key as Key;
+    return key as unknown as Key;
   }
 }

@@ -5,7 +5,7 @@
  */
 
 import screenshot from 'screenshot-desktop';
-import { RTCVideoSource, createCanvas, createImageData } from 'wrtc';
+import { RTCVideoSource, createCanvas, createImageData } from './wrtc-stub.js';
 import { ScreenInfo, DisplayInfo } from '@desktop-mcp/shared';
 
 export interface ScreenCaptureOptions {
@@ -158,7 +158,7 @@ export class ScreenCapture {
     try {
       // Get display information
       const displays = await this.getDisplays();
-      const primaryDisplay = displays.find(d => d.isPrimary) || displays[0];
+      const primaryDisplay = displays.find(d => d.primary) || displays[0];
 
       if (!primaryDisplay) {
         throw new Error('No displays found');
@@ -190,13 +190,11 @@ export class ScreenCapture {
     // For now, return mock data
     return [
       {
-        id: 'primary',
+        id: 0,
         name: 'Primary Display',
         width: 1920,
         height: 1080,
-        x: 0,
-        y: 0,
-        isPrimary: true
+        primary: true
       }
     ];
   }

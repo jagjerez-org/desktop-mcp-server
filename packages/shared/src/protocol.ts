@@ -36,12 +36,60 @@ export interface KeyboardPressMessage extends BaseMessage {
   keys: string[];
 }
 
+export interface MouseDragMessage extends BaseMessage {
+  type: 'mouse_drag';
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+}
+
+export interface MouseScrollMessage extends BaseMessage {
+  type: 'mouse_scroll';
+  amount: number;
+  x?: number;
+  y?: number;
+}
+
+export interface KeyboardHoldMessage extends BaseMessage {
+  type: 'keyboard_hold';
+  key: string;
+  action: 'down' | 'up';
+}
+
+export interface ClipboardReadMessage extends BaseMessage {
+  type: 'clipboard_read';
+}
+
+export interface ClipboardWriteMessage extends BaseMessage {
+  type: 'clipboard_write';
+  text: string;
+}
+
+export interface ShellExecMessage extends BaseMessage {
+  type: 'shell_exec';
+  command: string;
+  workingDirectory?: string;
+  timeout?: number;
+}
+
+export interface GetScreenInfoMessage extends BaseMessage {
+  type: 'get_screen_info';
+}
+
 // Union of all command messages
 export type CommandMessage = 
   | MouseMoveMessage
   | MouseClickMessage
   | KeyboardTypeMessage
-  | KeyboardPressMessage;
+  | KeyboardPressMessage
+  | MouseDragMessage
+  | MouseScrollMessage
+  | KeyboardHoldMessage
+  | ClipboardReadMessage
+  | ClipboardWriteMessage
+  | ShellExecMessage
+  | GetScreenInfoMessage;
 
 // ===== Response Messages (Agent → Server) =====
 export interface ResultMessage extends BaseMessage {
@@ -63,11 +111,24 @@ export interface ErrorMessage extends BaseMessage {
   originalMessageId?: string;
 }
 
+export interface ClipboardContentMessage extends BaseMessage {
+  type: 'clipboard_content';
+  text: string;
+}
+
+export interface ShellOutputMessage extends BaseMessage {
+  type: 'shell_output';
+  output: string;
+  exitCode: number;
+}
+
 // Union of all response messages
 export type ResponseMessage = 
   | ResultMessage
   | ScreenInfoMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | ClipboardContentMessage
+  | ShellOutputMessage;
 
 // Union of all protocol messages
 export type ProtocolMessage = CommandMessage | ResponseMessage;
@@ -78,6 +139,15 @@ export class ProtocolValidator {
     return typeof data === 'object' && 
            data !== null && 
            typeof data.type === 'string';
+  }
+
+  static isCommandMessage(data: any): data is CommandMessage {
+    const commandTypes = [
+      'mouse_move', 'mouse_click', 'mouse_drag', 'mouse_scroll',
+      'keyboard_type', 'keyboard_press', 'keyboard_hold',
+      'clipboard_read', 'clipboard_write', 'shell_exec', 'get_screen_info'
+    ];
+    return this.isValidMessage(data) && commandTypes.includes(data.type);
   }
 
   static validateMousePosition(x: number, y: number): boolean {
@@ -154,6 +224,94 @@ export class MessageBuilder {
       type: 'error',
       error,
       originalMessageId,
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static mouseDrag(fromX: number, fromY: number, toX: number, toY: number, id?: string): MouseDragMessage {
+    return {
+      type: 'mouse_drag',
+      fromX,
+      fromY,
+      toX,
+      toY,
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static mouseScroll(amount: number, x?: number, y?: number, id?: string): MouseScrollMessage {
+    return {
+      type: 'mouse_scroll',
+      amount,
+      x,
+      y,
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static keyboardHold(key: string, action: 'down' | 'up', id?: string): KeyboardHoldMessage {
+    return {
+      type: 'keyboard_hold',
+      key,
+      action,
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static clipboardRead(id?: string): ClipboardReadMessage {
+    return {
+      type: 'clipboard_read',
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static clipboardWrite(text: string, id?: string): ClipboardWriteMessage {
+    return {
+      type: 'clipboard_write',
+      text,
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static shellExec(command: string, workingDirectory?: string, timeout?: number, id?: string): ShellExecMessage {
+    return {
+      type: 'shell_exec',
+      command,
+      workingDirectory,
+      timeout,
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static getScreenInfo(id?: string): GetScreenInfoMessage {
+    return {
+      type: 'get_screen_info',
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static clipboardContent(text: string, id?: string): ClipboardContentMessage {
+    return {
+      type: 'clipboard_content',
+      text,
+      id,
+      timestamp: Date.now()
+    };
+  }
+
+  static shellOutput(output: string, exitCode: number, id?: string): ShellOutputMessage {
+    return {
+      type: 'shell_output',
+      output,
+      exitCode,
       id,
       timestamp: Date.now()
     };

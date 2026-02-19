@@ -28,6 +28,50 @@ export interface DeviceInfo {
 }
 
 // ===== Basic Types =====
+export interface FrameCapture {
+  data: Buffer;
+  width: number;
+  height: number;
+  format: string;
+  timestamp: number;
+  quality?: number;
+}
+
+export interface AudioConfig {
+  sampleRate?: number;
+  channels?: number;
+  bitDepth?: number;
+}
+
+export interface AudioData {
+  data: Buffer;
+  format: string;
+  duration: number;
+}
+
+export interface DisplayInfo {
+  id: number;
+  name: string;
+  width: number;
+  height: number;
+  primary: boolean;
+}
+
+export interface ShellResult {
+  output: string;
+  exitCode: number;
+}
+
+export type RTCConnectionState = 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
+
+export interface RTCConnectionInfo {
+  connectionState: string;
+  iceConnectionState: string;
+  signalingState: string;
+  localDescription: any;
+  remoteDescription: any;
+}
+
 export interface SignalingMessage {
   type: 'offer' | 'answer' | 'ice-candidate' | 'auth' | 'auth-response' | 'pair' | 'pair-response';
   data?: any;
@@ -43,12 +87,15 @@ export interface ScreenInfo {
   cursorX: number;
   cursorY: number;
   scaleFactor: number;
+  displays?: DisplayInfo[];
 }
 
 export interface ConnectionStatus {
   isConnected: boolean;
   latency?: number;
   lastActivity: number;
+  resolution?: { width: number; height: number };
+  frameRate?: number;
 }
 
 // ===== Mouse/Input Types =====
@@ -82,4 +129,5 @@ export interface AgentConfig {
   deviceName?: string;
   autoReconnect?: boolean;
   reconnectInterval?: number;
+  capture?: { fps?: number; quality?: number };
 }

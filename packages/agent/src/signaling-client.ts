@@ -177,8 +177,8 @@ export class SignalingClient {
         }
       };
 
-      this.websocket.on('message', responseHandler);
-      this.websocket.send(JSON.stringify(message));
+      this.websocket?.on('message', responseHandler);
+      this.websocket?.send(JSON.stringify(message));
 
       // Timeout after 30 seconds
       setTimeout(() => {

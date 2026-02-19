@@ -7,7 +7,7 @@
  * - Manages connection state and stats
  */
 
-import { RTCPeerConnection, RTCDataChannel, RTCIceCandidate, RTCSessionDescription } from 'wrtc';
+import { RTCPeerConnection, RTCDataChannel, RTCIceCandidate, RTCSessionDescription } from './wrtc-stub.js';
 import sharp from 'sharp';
 import { 
   ProtocolMessage, 
@@ -16,7 +16,7 @@ import {
   FrameCapture,
   ConnectionStatus,
   SignalingMessage,
-  RTCConnectionState
+  RTCConnectionInfo
 } from '@desktop-mcp/shared';
 
 export interface WebRTCClientOptions {
@@ -38,7 +38,7 @@ export class WebRTCClient {
   private maxFrameBufferSize = 10;
 
   // Event handlers
-  private onConnectionStateChange?: (state: RTCConnectionState) => void;
+  private onConnectionStateChange?: (state: RTCConnectionInfo) => void;
   private onDataChannelMessage?: (message: ResponseMessage) => void;
   private onVideoFrame?: (frame: FrameCapture) => void;
   private onAudioData?: (data: ArrayBuffer) => void;
@@ -314,7 +314,7 @@ export class WebRTCClient {
   /**
    * Get WebRTC connection state
    */
-  getConnectionState(): RTCConnectionState {
+  getConnectionState(): RTCConnectionInfo {
     return {
       connectionState: this.peerConnection.connectionState,
       iceConnectionState: this.peerConnection.iceConnectionState,

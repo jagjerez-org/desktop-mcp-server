@@ -8,13 +8,13 @@
  * - Connection state management
  */
 
-import { RTCPeerConnection, RTCDataChannel, RTCIceCandidate, RTCSessionDescription } from 'wrtc';
+import { RTCPeerConnection, RTCDataChannel, RTCIceCandidate, RTCSessionDescription } from './wrtc-stub.js';
 import { 
   CommandMessage, 
   ResponseMessage, 
   ProtocolMessage,
   ProtocolValidator,
-  RTCConnectionState,
+  RTCConnectionInfo,
   ConnectionStatus
 } from '@desktop-mcp/shared';
 import { ScreenCapture } from './screen-capture.js';
@@ -38,7 +38,7 @@ export class WebRTCPeer {
   private deviceId: string;
 
   // Event handlers
-  private onConnectionStateChange?: (state: RTCConnectionState) => void;
+  private onConnectionStateChange?: (state: RTCConnectionInfo) => void;
   private onIceCandidate?: (candidate: RTCIceCandidate) => void;
   private onError?: (error: Error) => void;
 
@@ -300,7 +300,7 @@ export class WebRTCPeer {
   /**
    * Get WebRTC connection state
    */
-  getConnectionState(): RTCConnectionState {
+  getConnectionState(): RTCConnectionInfo {
     return {
       connectionState: this.peerConnection.connectionState,
       iceConnectionState: this.peerConnection.iceConnectionState,
@@ -341,7 +341,7 @@ export class WebRTCPeer {
   /**
    * Event handler setters
    */
-  onConnect(handler: (state: RTCConnectionState) => void): void {
+  onConnect(handler: (state: RTCConnectionInfo) => void): void {
     this.onConnectionStateChange = handler;
   }
 

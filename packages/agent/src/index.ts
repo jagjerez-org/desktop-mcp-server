@@ -20,19 +20,7 @@ const DEFAULT_CONFIG: AgentConfig = {
   reconnectInterval: 5000,
   capture: {
     quality: 80,
-    frameRate: 30,
-    maxResolution: {
-      width: 1920,
-      height: 1080
-    }
-  },
-  audio: {
-    enabled: true,
-    config: {
-      sampleRate: 48000,
-      channels: 2,
-      codec: 'opus'
-    }
+    fps: 30
   }
 };
 
