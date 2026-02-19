@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "WebRTC-based desktop control MCP server with real-time screen sharing and remote input",
   "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "workspaces": [
     "packages/*"
   ],

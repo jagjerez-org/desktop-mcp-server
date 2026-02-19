@@ -9,7 +9,7 @@
  */
 
 import WebSocket from 'ws';
-import { SignalingMessage, DeviceInfo, AgentConfig } from '@desktop-mcp/shared';
+import { SignalingMessage, DeviceInfo, AgentConfig } from 'desktop-mcp-shared';
 import { WebRTCPeer } from './webrtc-peer.js';
 
 export interface SignalingClientOptions {

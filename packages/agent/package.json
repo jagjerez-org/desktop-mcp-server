@@ -1,12 +1,20 @@
 {
-  "name": "@desktop-mcp/agent",
+  "name": "desktop-mcp-agent",
   "version": "1.0.0",
-  "description": "Desktop agent for WebRTC-based MCP server",
+  "description": "Desktop agent for remote control via WebRTC — pairs with desktop-mcp-server for AI-driven desktop automation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "desktop-mcp-agent": "dist/index.js"
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jagjerez-org/desktop-mcp-server.git",
+    "directory": "packages/agent"
+  },
+  "keywords": ["mcp", "desktop", "agent", "webrtc", "remote-control", "screen-capture", "automation"],
+  "files": ["dist", "README.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
@@ -14,10 +22,11 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@desktop-mcp/shared": "file:../shared",
+    "desktop-mcp-shared": "^1.0.0",
     "@nut-tree-fork/nut-js": "^4.2.6",
     "clipboardy": "^5.3.0",
     "commander": "^11.0.0",

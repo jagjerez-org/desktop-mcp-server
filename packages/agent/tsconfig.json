@@ -15,7 +15,7 @@
     "types": ["node"],
     "typeRoots": ["../../types", "../../node_modules/@types"],
     "paths": {
-      "@desktop-mcp/shared": ["../shared/dist"]
+      "desktop-mcp-shared": ["../shared/dist"]
     },
     "baseUrl": "."
   },

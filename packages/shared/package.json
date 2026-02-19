@@ -1,20 +1,28 @@
 {
-  "name": "@desktop-mcp/shared",
+  "name": "desktop-mcp-shared",
   "version": "1.0.0",
   "description": "Shared types and protocol definitions for desktop MCP server",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jagjerez-org/desktop-mcp-server.git",
+    "directory": "packages/shared"
+  },
+  "keywords": ["mcp", "desktop", "webrtc", "protocol", "types"],
+  "files": ["dist", "README.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "typescript": "^5.3.0",
     "vitest": "^1.0.0"
-  },
-  "peerDependencies": {}
+  }
 }

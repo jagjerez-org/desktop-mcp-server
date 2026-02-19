@@ -5,7 +5,7 @@
  * For now, this is stubbed out to resolve build errors
  */
 
-import { AudioConfig, AudioData } from '@desktop-mcp/shared';
+import { AudioConfig, AudioData } from 'desktop-mcp-shared';
 
 export interface AudioDeviceInfo {
   id: string;

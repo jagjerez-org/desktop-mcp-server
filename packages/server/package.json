@@ -1,12 +1,20 @@
 {
-  "name": "@desktop-mcp/server",
+  "name": "desktop-mcp-server",
   "version": "1.0.0",
-  "description": "WebRTC-based MCP server for desktop control",
+  "description": "WebRTC-based MCP server for remote desktop control — screen capture, mouse/keyboard input, shell execution, and more",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "desktop-mcp-server": "dist/index.js"
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jagjerez-org/desktop-mcp-server.git",
+    "directory": "packages/server"
+  },
+  "keywords": ["mcp", "desktop", "webrtc", "remote-control", "screen-capture", "model-context-protocol", "ai-tools"],
+  "files": ["dist", "README.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
@@ -14,10 +22,11 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@desktop-mcp/shared": "file:../shared",
+    "desktop-mcp-shared": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "sharp": "^0.34.5",
     "uuid": "^9.0.0",

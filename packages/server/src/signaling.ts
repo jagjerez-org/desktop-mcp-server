@@ -10,7 +10,7 @@
 
 import WebSocket, { WebSocketServer } from 'ws';
 import { AuthManager } from './auth.js';
-import { SignalingMessage, DeviceInfo } from '@desktop-mcp/shared';
+import { SignalingMessage, DeviceInfo } from 'desktop-mcp-shared';
 
 export interface ConnectedAgent {
   deviceId: string;
