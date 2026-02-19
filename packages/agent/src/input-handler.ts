@@ -265,10 +265,10 @@ export class InputHandler {
         options.env = { ...process.env, ...message.environment };
       }
 
-      const { stdout, stderr } = await execAsync(message.command, options);
+      const { stdout, stderr } = await execAsync(message.command, { ...options, encoding: 'utf-8' });
       
       const result: ShellResult = {
-        output: stdout || '',
+        output: String(stdout || ''),
         exitCode: 0
       };
 

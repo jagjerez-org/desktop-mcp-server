@@ -8,7 +8,7 @@
  * - Connection state management
  */
 
-import WebSocket from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 import { AuthManager } from './auth.js';
 import { SignalingMessage, DeviceInfo } from '@desktop-mcp/shared';
 
@@ -30,7 +30,7 @@ export class SignalingServer {
 
   constructor(port: number, authManager: AuthManager) {
     this.authManager = authManager;
-    this.server = new WebSocket.Server({ port });
+    this.server = new WebSocketServer({ port });
     this.setupWebSocketServer();
     
     console.log(`🔗 Signaling server listening on port ${port}`);

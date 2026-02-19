@@ -148,16 +148,13 @@ export class WebRTCPeer {
 
         if (message.type === 'ping') {
           // Respond to ping with pong
-          this.sendResponse({
-            type: 'pong',
-            timestamp: Date.now()
-          });
+          this.dataChannel?.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
           return;
         }
 
-        if (ProtocolValidator.isCommandMessage(message)) {
+        if (ProtocolValidator.isCommandMessage(message as any)) {
           // Handle command
-          const response = await this.inputHandler.handleCommand(message);
+          const response = await this.inputHandler.handleCommand(message as CommandMessage);
           this.sendResponse(response);
         }
 

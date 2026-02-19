@@ -130,8 +130,17 @@ export type ResponseMessage =
   | ClipboardContentMessage
   | ShellOutputMessage;
 
+// Ping/Pong for latency measurement
+export interface PingMessage extends BaseMessage {
+  type: 'ping';
+}
+
+export interface PongMessage extends BaseMessage {
+  type: 'pong';
+}
+
 // Union of all protocol messages
-export type ProtocolMessage = CommandMessage | ResponseMessage;
+export type ProtocolMessage = CommandMessage | ResponseMessage | PingMessage | PongMessage;
 
 // ===== Message Validation =====
 export class ProtocolValidator {
@@ -148,6 +157,11 @@ export class ProtocolValidator {
       'clipboard_read', 'clipboard_write', 'shell_exec', 'get_screen_info'
     ];
     return this.isValidMessage(data) && commandTypes.includes(data.type);
+  }
+
+  static isResponseMessage(data: any): data is ResponseMessage {
+    const responseTypes = ['result', 'screen_info', 'error', 'clipboard_content', 'shell_output'];
+    return this.isValidMessage(data) && responseTypes.includes(data.type);
   }
 
   static validateMousePosition(x: number, y: number): boolean {

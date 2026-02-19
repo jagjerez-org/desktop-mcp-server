@@ -29,7 +29,7 @@ export interface DeviceInfo {
 
 // ===== Basic Types =====
 export interface FrameCapture {
-  data: Buffer;
+  data: string; // base64 encoded
   width: number;
   height: number;
   format: string;
@@ -96,6 +96,7 @@ export interface ConnectionStatus {
   lastActivity: number;
   resolution?: { width: number; height: number };
   frameRate?: number;
+  deviceInfo?: DeviceInfo;
 }
 
 // ===== Mouse/Input Types =====

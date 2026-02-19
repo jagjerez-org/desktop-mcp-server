@@ -1,21 +1,24 @@
 {
-  "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "declaration": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
     "types": ["node"],
-    "typeRoots": ["../../types", "../../node_modules/@types"]
+    "typeRoots": ["../../types", "../../node_modules/@types"],
+    "paths": {
+      "@desktop-mcp/shared": ["../shared/dist"]
+    },
+    "baseUrl": "."
   },
-  "include": [
-    "src/**/*",
-    "../../types/**/*"
-  ],
-  "exclude": [
-    "**/*.test.ts",
-    "**/*.spec.ts"
-  ],
-  "references": [
-    { "path": "../shared" }
-  ]
+  "include": ["src/**/*", "../../types/**/*"],
+  "exclude": ["**/*.test.ts", "**/*.spec.ts"]
 }

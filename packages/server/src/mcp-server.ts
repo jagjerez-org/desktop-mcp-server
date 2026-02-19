@@ -11,6 +11,7 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -126,7 +127,7 @@ export class DesktopMCPServer {
     });
 
     // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request: any, extra: any): Promise<any> => {
       const { name, arguments: args } = request.params;
 
       try {
@@ -500,10 +501,10 @@ export class DesktopMCPServer {
 
     return {
       content: [{
-        type: 'text',
+        type: 'text' as const,
         text: `Frame captured: ${frame.width}x${frame.height} ${frame.format.toUpperCase()}`
       }, {
-        type: 'image',
+        type: 'image' as const,
         data: frame.data,
         mimeType: `image/${frame.format}`
       }]
@@ -527,15 +528,15 @@ export class DesktopMCPServer {
       throw new Error('No frames available');
     }
 
-    const content = [{
-      type: 'text',
+    const content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }> = [{
+      type: 'text' as const,
       text: `Captured ${frames.length} frames`
     }];
 
     for (let i = 0; i < frames.length; i++) {
       const frame = frames[i];
       content.push({
-        type: 'image',
+        type: 'image' as const,
         data: frame.data,
         mimeType: `image/${frame.format}`
       });
@@ -692,7 +693,8 @@ export class DesktopMCPServer {
     console.log('🚀 Starting Desktop MCP Server...');
     
     // Start listening for stdio
-    this.server.connect(process.stdin, process.stdout);
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
     
     console.log('✅ Desktop MCP Server started successfully');
     console.log('📡 Signaling server listening on port 8080');

@@ -7,8 +7,7 @@
  * - Manages connection state and stats
  */
 
-import { RTCPeerConnection, RTCDataChannel, RTCIceCandidate, RTCSessionDescription } from './wrtc-stub.js';
-import sharp from 'sharp';
+import { RTCPeerConnection, RTCDataChannel, RTCIceCandidate, RTCSessionDescription, RTCRtpSender } from './wrtc-stub.js';
 import { 
   ProtocolMessage, 
   CommandMessage, 
@@ -20,7 +19,7 @@ import {
 } from '@desktop-mcp/shared';
 
 export interface WebRTCClientOptions {
-  iceServers?: RTCIceServer[];
+  iceServers?: { urls: string | string[] }[];
   maxBitrate?: number;
   maxFramerate?: number;
 }
@@ -28,8 +27,8 @@ export interface WebRTCClientOptions {
 export class WebRTCClient {
   private peerConnection: RTCPeerConnection;
   private dataChannel: RTCDataChannel | null = null;
-  private remoteVideoTrack: MediaStreamTrack | null = null;
-  private remoteAudioTrack: MediaStreamTrack | null = null;
+  private remoteVideoTrack: any | null = null;
+  private remoteAudioTrack: any | null = null;
   private deviceId: string;
   private isConnected = false;
   private latency = 0;
@@ -47,7 +46,7 @@ export class WebRTCClient {
   constructor(deviceId: string, options: WebRTCClientOptions = {}) {
     this.deviceId = deviceId;
     
-    const config: RTCConfiguration = {
+    const config: any = {
       iceServers: options.iceServers || [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' }
@@ -76,7 +75,7 @@ export class WebRTCClient {
     };
 
     // Handle remote streams
-    this.peerConnection.ontrack = (event) => {
+    this.peerConnection.ontrack = (event: any) => {
       const track = event.track;
       console.log(`📺 Received ${track.kind} track:`, track.id);
 
@@ -135,9 +134,9 @@ export class WebRTCClient {
       console.log(`📡 Data channel closed: ${channel.label}`);
     };
 
-    channel.onmessage = (event) => {
+    channel.onmessage = (event: any) => {
       try {
-        const message: ProtocolMessage = JSON.parse(event.data);
+        const message = JSON.parse(event.data) as any;
         
         if (message.type === 'pong') {
           // Calculate latency
@@ -152,13 +151,13 @@ export class WebRTCClient {
       }
     };
 
-    channel.onerror = (error) => {
+    channel.onerror = (error: any) => {
       console.error(`❌ Data channel error (${channel.label}):`, error);
       this.onError?.(new Error(`Data channel error: ${error}`));
     };
   }
 
-  private setupVideoCapture(track: MediaStreamTrack): void {
+  private setupVideoCapture(track: any): void {
     // This is a simplified version - in practice you'd need to use 
     // canvas or WebRTC internals to capture frames
     console.log('🎥 Video capture setup for track:', track.id);
@@ -183,7 +182,7 @@ export class WebRTCClient {
     }, 100); // 10 FPS for simulation
   }
 
-  private setupAudioCapture(track: MediaStreamTrack): void {
+  private setupAudioCapture(track: any): void {
     console.log('🔊 Audio capture setup for track:', track.id);
     
     // Audio capture would be implemented here
@@ -208,14 +207,16 @@ export class WebRTCClient {
     }, 5000); // Ping every 5 seconds
   }
 
-  private async applyVideoConstraints(sender: RTCRtpSender, options: WebRTCClientOptions): Promise<void> {
-    const params = sender.getParameters();
-    
-    if (options.maxBitrate && params.encodings[0]) {
-      params.encodings[0].maxBitrate = options.maxBitrate;
+  private async applyVideoConstraints(sender: any, options: WebRTCClientOptions): Promise<void> {
+    try {
+      const params = sender.getParameters();
+      if (options.maxBitrate && params.encodings?.[0]) {
+        params.encodings[0].maxBitrate = options.maxBitrate;
+      }
+      await sender.setParameters(params);
+    } catch {
+      // Not all implementations support this
     }
-
-    await sender.setParameters(params);
   }
 
   /**
@@ -277,6 +278,7 @@ export class WebRTCClient {
    */
   async convertFrame(frame: FrameCapture, format: 'jpeg' | 'png' = 'jpeg', quality: number = 80): Promise<FrameCapture> {
     try {
+      const sharp = (await import('sharp')).default;
       const inputBuffer = Buffer.from(frame.data, 'base64');
       const outputBuffer = await sharp(inputBuffer)
         [format]({ quality: format === 'jpeg' ? quality : undefined })
@@ -327,7 +329,7 @@ export class WebRTCClient {
   /**
    * Event handler setters
    */
-  onConnect(handler: (state: RTCConnectionState) => void): void {
+  onConnect(handler: (state: RTCConnectionInfo) => void): void {
     this.onConnectionStateChange = handler;
   }
 

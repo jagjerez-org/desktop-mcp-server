@@ -39,7 +39,7 @@ export class ScreenCapture {
   /**
    * Start screen capture
    */
-  async startCapture(): Promise<MediaStreamTrack> {
+  async startCapture(): Promise<any> {
     if (this.isCapturing) {
       throw new Error('Screen capture already started');
     }
