@@ -26,9 +26,27 @@ npm install
 npm run build
 ```
 
-## Usage with Claude Desktop
+## Usage
 
-Add to your `claude_desktop_config.json`:
+### Stdio (local, default)
+```bash
+node dist/index.js
+```
+
+### HTTP (remote access)
+```bash
+node dist/index.js --transport=http --port=3100 --api-key=mysecretkey
+```
+
+### HTTPS (remote + TLS)
+```bash
+node dist/index.js --transport=https --port=3100 --api-key=mysecretkey --cert=cert.pem --key=key.pem
+```
+
+### Environment Variables
+- `MCP_API_KEY` — API key for authentication (alternative to `--api-key`)
+
+### Claude Desktop (stdio)
 
 ```json
 {
@@ -41,17 +59,15 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-## Usage with OpenClaw
-
-Add to your gateway config:
+### OpenClaw (remote HTTP)
 
 ```yaml
 mcp:
   servers:
     desktop:
-      command: node
-      args:
-        - /path/to/desktop-mcp-server/dist/index.js
+      url: http://YOUR_PC_IP:3100/mcp
+      headers:
+        Authorization: Bearer mysecretkey
 ```
 
 ## Platform Support

@@ -487,9 +487,84 @@ server.tool(
 
 // ── Start ─────────────────────────────────────────────
 async function main() {
-  const transport = new StdioServerTransport();
+  const args = process.argv.slice(2);
+  const mode = args.find((a) => a.startsWith("--transport="))?.split("=")[1] ?? "stdio";
+  const port = parseInt(args.find((a) => a.startsWith("--port="))?.split("=")[1] ?? "3100", 10);
+  const host = args.find((a) => a.startsWith("--host="))?.split("=")[1] ?? "0.0.0.0";
+  const apiKey = args.find((a) => a.startsWith("--api-key="))?.split("=")[1] ?? process.env.MCP_API_KEY;
+  const certFile = args.find((a) => a.startsWith("--cert="))?.split("=")[1];
+  const keyFile = args.find((a) => a.startsWith("--key="))?.split("=")[1];
+
+  if (mode === "stdio") {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("🖥️ Desktop MCP Server running (stdio transport)");
+    return;
+  }
+
+  // ── HTTP/HTTPS with Streamable HTTP transport ────────
+  const { createServer } = await import("http");
+  const https = await import("https");
+  const { readFileSync } = await import("fs");
+  const { StreamableHTTPServerTransport } = await import(
+    "@modelcontextprotocol/sdk/server/streamableHttp.js"
+  );
+
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => crypto.randomUUID(),
+  });
+
   await server.connect(transport);
-  console.error("🖥️ Desktop MCP Server running (stdio transport)");
+
+  const handler = async (req: any, res: any) => {
+    // CORS
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id");
+    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+
+    // Auth check
+    if (apiKey) {
+      const auth = req.headers["authorization"];
+      if (auth !== `Bearer ${apiKey}`) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+    }
+
+    // Route MCP to /mcp
+    if (req.url === "/mcp") {
+      await transport.handleRequest(req, res);
+      return;
+    }
+
+    // Health check
+    if (req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", transport: mode, tools: 16 }));
+      return;
+    }
+
+    res.writeHead(404);
+    res.end("Not found");
+  };
+
+  let httpServer;
+  if (mode === "https" && certFile && keyFile) {
+    const cert = readFileSync(certFile);
+    const key = readFileSync(keyFile);
+    httpServer = https.createServer({ cert, key }, handler);
+    console.error(`🔒 Desktop MCP Server running on https://${host}:${port}/mcp`);
+  } else {
+    httpServer = createServer(handler);
+    console.error(`🖥️ Desktop MCP Server running on http://${host}:${port}/mcp`);
+  }
+
+  if (apiKey) console.error("🔑 API key authentication enabled");
+  else console.error("⚠️ No API key set — server is open! Use --api-key=<key> or MCP_API_KEY env");
+
+  httpServer.listen(port, host);
 }
 
 main().catch(console.error);
