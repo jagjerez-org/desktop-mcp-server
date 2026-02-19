@@ -84,9 +84,46 @@ mcp:
 sudo apt install xclip libxtst-dev
 ```
 
-## Security ⚠️
+## Security 🔐
 
-This server gives full desktop control. Only run it in trusted environments. The `run_command` tool can execute arbitrary shell commands.
+### Pairing-Based Authentication
+
+The server uses a **Bluetooth-style pairing** flow:
+
+1. **Start the server** → first time it auto-generates a 6-digit pairing code (shown in console)
+2. **Client sends the code** to `POST /pair` with a device name
+3. **Server returns a token** (prefix `dmcp_`) — store it securely
+4. **All future requests** use `Authorization: Bearer dmcp_...`
+5. **Revoke anytime** via `DELETE /devices/{id}` or `DELETE /devices/all`
+
+```bash
+# Pair a new device
+curl -X POST http://localhost:3100/pair \
+  -H "Content-Type: application/json" \
+  -d '{"code": "123456", "name": "jarvis-openclaw"}'
+
+# List paired devices (requires auth)
+curl http://localhost:3100/devices \
+  -H "Authorization: Bearer dmcp_..."
+
+# Generate new pairing code (requires auth)
+curl -X POST http://localhost:3100/devices/pair \
+  -H "Authorization: Bearer dmcp_..."
+
+# Revoke a device
+curl -X DELETE http://localhost:3100/devices/{deviceId} \
+  -H "Authorization: Bearer dmcp_..."
+```
+
+### Token Storage
+- Server secret: `~/.desktop-mcp/server.secret` (mode 0600)
+- Paired tokens (hashed): `~/.desktop-mcp/tokens.json` (mode 0600)
+- Tokens are HMAC-SHA256 hashed — raw tokens never stored on disk
+
+### Legacy API Key
+Still supported via `--api-key` for backward compatibility.
+
+⚠️ This server gives full desktop control. Only run in trusted networks. Use HTTPS in production.
 
 ## License
 

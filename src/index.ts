@@ -504,17 +504,51 @@ async function main() {
 
   // ── HTTP/HTTPS with Streamable HTTP transport ────────
   const { createServer } = await import("http");
-  const https = await import("https");
+  const httpsModule = await import("https");
   const { readFileSync } = await import("fs");
   const { StreamableHTTPServerTransport } = await import(
     "@modelcontextprotocol/sdk/server/streamableHttp.js"
   );
+  const {
+    initAuth,
+    authenticate,
+    startPairing,
+    completePairing,
+    listDevices,
+    revokeDevice,
+    revokeAll,
+    isPairingActive,
+  } = await import("./auth.js");
+
+  initAuth();
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => crypto.randomUUID(),
   });
 
   await server.connect(transport);
+
+  // Auto-start first pairing if no devices paired yet
+  const existingDevices = listDevices();
+  if (existingDevices.length === 0) {
+    console.error("📱 No paired devices. Starting initial pairing...");
+    startPairing(300); // 5 min for first pairing
+  }
+
+  const getClientIp = (req: any) =>
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ?? req.socket?.remoteAddress ?? "unknown";
+
+  const readBody = (req: any): Promise<string> =>
+    new Promise((resolve) => {
+      let body = "";
+      req.on("data", (c: Buffer) => (body += c.toString()));
+      req.on("end", () => resolve(body));
+    });
+
+  const json = (res: any, status: number, data: any) => {
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(data));
+  };
 
   const handler = async (req: any, res: any) => {
     // CORS
@@ -523,26 +557,81 @@ async function main() {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id");
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
-    // Auth check
-    if (apiKey) {
-      const auth = req.headers["authorization"];
-      if (auth !== `Bearer ${apiKey}`) {
-        res.writeHead(401, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Unauthorized" }));
-        return;
-      }
+    const url = req.url?.split("?")[0];
+
+    // ── Public: health ──────────────────────────────
+    if (url === "/health") {
+      json(res, 200, {
+        status: "ok",
+        transport: mode,
+        tools: 16,
+        pairedDevices: listDevices().length,
+        pairingActive: isPairingActive(),
+      });
+      return;
     }
 
-    // Route MCP to /mcp
-    if (req.url === "/mcp") {
+    // ── Public: pair ────────────────────────────────
+    if (url === "/pair" && req.method === "POST") {
+      const body = JSON.parse(await readBody(req));
+      const { code, name } = body;
+      if (!code || !name) {
+        json(res, 400, { error: "Provide 'code' and 'name'" });
+        return;
+      }
+      const result = completePairing(code, name, getClientIp(req));
+      if (!result) {
+        json(res, 403, { error: "Invalid or expired pairing code" });
+        return;
+      }
+      json(res, 200, {
+        token: result.token,
+        deviceId: result.deviceId,
+        message: "Paired successfully. Store this token securely — it won't be shown again.",
+      });
+      return;
+    }
+
+    // ── Everything below requires auth ──────────────
+    const device = authenticate(req);
+
+    // Legacy: also accept static API key
+    const legacyAuth = apiKey && req.headers["authorization"] === `Bearer ${apiKey}`;
+
+    if (!device && !legacyAuth) {
+      json(res, 401, { error: "Unauthorized. Pair first via POST /pair with a pairing code." });
+      return;
+    }
+
+    // ── Authenticated: MCP ──────────────────────────
+    if (url === "/mcp") {
       await transport.handleRequest(req, res);
       return;
     }
 
-    // Health check
-    if (req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", transport: mode, tools: 16 }));
+    // ── Authenticated: device management ────────────
+    if (url === "/devices" && req.method === "GET") {
+      json(res, 200, { devices: listDevices() });
+      return;
+    }
+
+    if (url === "/devices/pair" && req.method === "POST") {
+      const body = JSON.parse(await readBody(req));
+      const ttl = body.ttlSeconds ?? 120;
+      const code = startPairing(ttl);
+      json(res, 200, { code, expiresIn: ttl, message: "Share this code with the device to pair." });
+      return;
+    }
+
+    if (url?.startsWith("/devices/") && req.method === "DELETE") {
+      const id = url.split("/")[2];
+      if (id === "all") {
+        const count = revokeAll();
+        json(res, 200, { revoked: count });
+      } else {
+        const ok = revokeDevice(id!);
+        json(res, ok ? 200 : 404, ok ? { revoked: id } : { error: "Device not found" });
+      }
       return;
     }
 
@@ -554,15 +643,15 @@ async function main() {
   if (mode === "https" && certFile && keyFile) {
     const cert = readFileSync(certFile);
     const key = readFileSync(keyFile);
-    httpServer = https.createServer({ cert, key }, handler);
+    httpServer = httpsModule.createServer({ cert, key }, handler);
     console.error(`🔒 Desktop MCP Server running on https://${host}:${port}/mcp`);
   } else {
     httpServer = createServer(handler);
     console.error(`🖥️ Desktop MCP Server running on http://${host}:${port}/mcp`);
   }
 
-  if (apiKey) console.error("🔑 API key authentication enabled");
-  else console.error("⚠️ No API key set — server is open! Use --api-key=<key> or MCP_API_KEY env");
+  if (apiKey) console.error("🔑 Legacy API key also accepted");
+  console.error("🔐 Pairing-based auth enabled. Tokens stored in ~/.desktop-mcp/");
 
   httpServer.listen(port, host);
 }
