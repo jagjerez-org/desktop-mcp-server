@@ -326,6 +326,165 @@ server.tool(
   }
 );
 
+// ── Tool: screen_stream ───────────────────────────────
+// Returns multiple sequential screenshots for "streaming" vision
+server.tool(
+  "screen_stream",
+  "Capture a burst of sequential screenshots for near-real-time vision. Returns multiple frames.",
+  {
+    frames: z.number().min(1).max(10).default(3).describe("Number of frames to capture"),
+    intervalMs: z.number().min(100).max(5000).default(500).describe("Interval between frames in ms"),
+    quality: z.number().min(1).max(100).default(40).describe("JPEG quality"),
+    maxWidth: z.number().default(800).describe("Max width per frame"),
+  },
+  async ({ frames, intervalMs, quality, maxWidth }) => {
+    const content: Array<{ type: "image"; data: string; mimeType: string } | { type: "text"; text: string }> = [];
+    for (let i = 0; i < frames; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, intervalMs));
+      try {
+        const imgBuffer = await screenshot({ format: "png" });
+        const jpeg = await sharp(imgBuffer)
+          .resize({ width: maxWidth, withoutEnlargement: true })
+          .jpeg({ quality })
+          .toBuffer();
+        content.push({ type: "image", data: jpeg.toString("base64"), mimeType: "image/jpeg" });
+      } catch (err) {
+        content.push({ type: "text", text: `Frame ${i} failed: ${err}` });
+      }
+    }
+    content.push({ type: "text", text: `Captured ${frames} frames at ${intervalMs}ms intervals` });
+    return { content };
+  }
+);
+
+// ── Tool: audio_play ──────────────────────────────────
+server.tool(
+  "audio_play",
+  "Play audio through the computer speakers. Accepts a file path or text-to-speech.",
+  {
+    filePath: z.string().optional().describe("Path to audio file to play"),
+    text: z.string().optional().describe("Text to speak via TTS (uses system TTS)"),
+    volume: z.number().min(0).max(100).optional().describe("Volume percentage"),
+  },
+  async ({ filePath, text, volume }) => {
+    const { execSync } = await import("child_process");
+    try {
+      if (volume !== undefined) {
+        if (process.platform === "linux") {
+          execSync(`pactl set-sink-volume @DEFAULT_SINK@ ${volume}%`);
+        } else if (process.platform === "darwin") {
+          execSync(`osascript -e "set volume output volume ${volume}"`);
+        }
+      }
+
+      if (filePath) {
+        if (process.platform === "linux") {
+          execSync(`paplay "${filePath}" || aplay "${filePath}"`, { timeout: 30000 });
+        } else if (process.platform === "darwin") {
+          execSync(`afplay "${filePath}"`, { timeout: 30000 });
+        } else {
+          execSync(`powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`, { timeout: 30000 });
+        }
+        return { content: [{ type: "text", text: `Played: ${filePath}` }] };
+      }
+
+      if (text) {
+        if (process.platform === "linux") {
+          execSync(`espeak-ng "${text.replace(/"/g, '\\"')}"`, { timeout: 15000 });
+        } else if (process.platform === "darwin") {
+          execSync(`say "${text.replace(/"/g, '\\"')}"`, { timeout: 15000 });
+        } else {
+          execSync(`powershell -c "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('${text}')"`, { timeout: 15000 });
+        }
+        return { content: [{ type: "text", text: `Spoke: "${text}"` }] };
+      }
+
+      return { content: [{ type: "text", text: "Provide filePath or text" }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Audio error: ${err}` }] };
+    }
+  }
+);
+
+// ── Tool: audio_record ────────────────────────────────
+server.tool(
+  "audio_record",
+  "Record audio from the computer microphone.",
+  {
+    durationSec: z.number().min(1).max(60).default(5).describe("Recording duration in seconds"),
+    outputPath: z.string().default("/tmp/mcp-recording.wav").describe("Output file path"),
+  },
+  async ({ durationSec, outputPath }) => {
+    const { execSync } = await import("child_process");
+    try {
+      if (process.platform === "linux") {
+        execSync(`arecord -d ${durationSec} -f S16_LE -r 16000 -c 1 "${outputPath}"`, { timeout: (durationSec + 5) * 1000 });
+      } else if (process.platform === "darwin") {
+        execSync(`rec -r 16000 -c 1 "${outputPath}" trim 0 ${durationSec}`, { timeout: (durationSec + 5) * 1000 });
+      } else {
+        // Windows: use ffmpeg
+        execSync(`ffmpeg -y -f dshow -i audio="Microphone" -t ${durationSec} -ar 16000 -ac 1 "${outputPath}"`, { timeout: (durationSec + 5) * 1000 });
+      }
+      const { statSync } = await import("fs");
+      const size = statSync(outputPath).size;
+      return { content: [{ type: "text", text: `Recorded ${durationSec}s → ${outputPath} (${size} bytes)` }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Record error: ${err}` }] };
+    }
+  }
+);
+
+// ── Tool: volume_control ──────────────────────────────
+server.tool(
+  "volume_control",
+  "Get or set system volume, or mute/unmute.",
+  {
+    action: z.enum(["get", "set", "mute", "unmute"]).default("get"),
+    level: z.number().min(0).max(100).optional().describe("Volume level (for set)"),
+  },
+  async ({ action, level }) => {
+    const { execSync } = await import("child_process");
+    try {
+      if (process.platform === "linux") {
+        switch (action) {
+          case "get": {
+            const vol = execSync("pactl get-sink-volume @DEFAULT_SINK@ | grep -oP '\\d+%' | head -1", { encoding: "utf-8" }).trim();
+            return { content: [{ type: "text", text: `Volume: ${vol}` }] };
+          }
+          case "set":
+            execSync(`pactl set-sink-volume @DEFAULT_SINK@ ${level}%`);
+            return { content: [{ type: "text", text: `Volume set to ${level}%` }] };
+          case "mute":
+            execSync("pactl set-sink-mute @DEFAULT_SINK@ 1");
+            return { content: [{ type: "text", text: "Muted" }] };
+          case "unmute":
+            execSync("pactl set-sink-mute @DEFAULT_SINK@ 0");
+            return { content: [{ type: "text", text: "Unmuted" }] };
+        }
+      } else if (process.platform === "darwin") {
+        switch (action) {
+          case "get": {
+            const vol = execSync('osascript -e "output volume of (get volume settings)"', { encoding: "utf-8" }).trim();
+            return { content: [{ type: "text", text: `Volume: ${vol}%` }] };
+          }
+          case "set":
+            execSync(`osascript -e "set volume output volume ${level}"`);
+            return { content: [{ type: "text", text: `Volume set to ${level}%` }] };
+          case "mute":
+            execSync('osascript -e "set volume with output muted"');
+            return { content: [{ type: "text", text: "Muted" }] };
+          case "unmute":
+            execSync('osascript -e "set volume without output muted"');
+            return { content: [{ type: "text", text: "Unmuted" }] };
+        }
+      }
+      return { content: [{ type: "text", text: `Volume control not implemented for ${process.platform}` }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Volume error: ${err}` }] };
+    }
+  }
+);
+
 // ── Start ─────────────────────────────────────────────
 async function main() {
   const transport = new StdioServerTransport();
