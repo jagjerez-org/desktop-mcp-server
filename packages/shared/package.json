@@ -1,5 +1,5 @@
 {
-  "name": "desktop-mcp-shared",
+  "name": "@jagjerez-org/desktop-mcp-shared",
   "version": "1.0.0",
   "description": "Shared types and protocol definitions for desktop MCP server",
   "main": "dist/index.js",
