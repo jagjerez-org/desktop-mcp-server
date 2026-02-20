@@ -24,7 +24,7 @@ import {
   ProtocolValidator,
   CommandMessage,
   MouseButton
-} from 'desktop-mcp-shared';
+} from '@jagjerez-org/desktop-mcp-shared';
 import { WebRTCClient } from './webrtc-client.js';
 import { SignalingServer, ConnectedAgent } from './signaling.js';
 import { AuthManager } from './auth.js';

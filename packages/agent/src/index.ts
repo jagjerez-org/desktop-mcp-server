@@ -10,7 +10,7 @@ import { program } from 'commander';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { SignalingClient } from './signaling-client.js';
-import { AgentConfig } from 'desktop-mcp-shared';
+import { AgentConfig } from '@jagjerez-org/desktop-mcp-shared';
 
 // Default configuration
 const DEFAULT_CONFIG: AgentConfig = {

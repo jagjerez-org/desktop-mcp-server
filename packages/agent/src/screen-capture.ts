@@ -6,7 +6,7 @@
 
 import screenshot from 'screenshot-desktop';
 import { RTCVideoSource, createCanvas, createImageData } from './wrtc-stub.js';
-import { ScreenInfo, DisplayInfo } from 'desktop-mcp-shared';
+import { ScreenInfo, DisplayInfo } from '@jagjerez-org/desktop-mcp-shared';
 
 export interface ScreenCaptureOptions {
   frameRate?: number;

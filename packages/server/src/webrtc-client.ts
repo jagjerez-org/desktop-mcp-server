@@ -16,7 +16,7 @@ import {
   ConnectionStatus,
   SignalingMessage,
   RTCConnectionInfo
-} from 'desktop-mcp-shared';
+} from '@jagjerez-org/desktop-mcp-shared';
 
 export interface WebRTCClientOptions {
   iceServers?: { urls: string | string[] }[];

@@ -16,7 +16,7 @@ import {
   ScreenInfo,
   ShellResult,
   MouseButton 
-} from 'desktop-mcp-shared';
+} from '@jagjerez-org/desktop-mcp-shared';
 
 const execAsync = promisify(exec);
 

@@ -16,7 +16,7 @@ import {
   ProtocolValidator,
   RTCConnectionInfo,
   ConnectionStatus
-} from 'desktop-mcp-shared';
+} from '@jagjerez-org/desktop-mcp-shared';
 import { ScreenCapture } from './screen-capture.js';
 import { AudioHandler } from './audio.js';
 import { InputHandler } from './input-handler.js';

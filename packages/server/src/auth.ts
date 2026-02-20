@@ -9,7 +9,7 @@
 
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { PairingCode, AuthToken, DeviceInfo } from 'desktop-mcp-shared';
+import { PairingCode, AuthToken, DeviceInfo } from '@jagjerez-org/desktop-mcp-shared';
 
 const SECRET_KEY = process.env.DESKTOP_MCP_SECRET || crypto.randomBytes(32).toString('hex');
 const PAIRING_CODE_EXPIRY = 5 * 60 * 1000; // 5 minutes
